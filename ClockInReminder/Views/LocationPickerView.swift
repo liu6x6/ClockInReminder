@@ -6,46 +6,25 @@ struct LocationPickerView: View {
     @Bindable var settings: ReminderSettings
     @Environment(\.dismiss) private var dismiss
     
-    @State private var cameraPosition: MapCameraPosition
-    @State private var mapCenterCoordinate: CLLocationCoordinate2D?
     @State private var searchText = ""
     @State private var searchResults: [MKMapItem] = []
-    @State private var selectedLocation: CLLocationCoordinate2D?
+    @State private var selectedCoordinate: CLLocationCoordinate2D?
     
     // 手动输入经纬度
     @State private var showManualInput = false
     @State private var manualLatitude = ""
     @State private var manualLongitude = ""
     
-    // 定位管理器
-    @State private var locationManager = CLLocationManager()
-    @State private var currentLocation: CLLocation?
-    
-    // 标记拖动
-    @State private var isDraggingMarker = false
-    
     init(settings: ReminderSettings) {
         self.settings = settings
         
-        // 如果已设置过位置，定位到该位置
         if settings.companyLatitude != 0 {
-            let coordinate = CLLocationCoordinate2D(
+            _selectedCoordinate = State(initialValue: CLLocationCoordinate2D(
                 latitude: settings.companyLatitude,
                 longitude: settings.companyLongitude
-            )
-            _cameraPosition = State(initialValue: .region(MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            )))
-            _selectedLocation = State(initialValue: coordinate)
+            ))
             _manualLatitude = State(initialValue: String(format: "%.6f", settings.companyLatitude))
             _manualLongitude = State(initialValue: String(format: "%.6f", settings.companyLongitude))
-        } else {
-            // 默认显示上海（会在 onAppear 中获取当前位置）
-            _cameraPosition = State(initialValue: .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737),
-                span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
-            )))
         }
     }
     
@@ -56,7 +35,7 @@ struct LocationPickerView: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("搜索公司地址（如：公司名、地址）", text: $searchText)
+                    TextField("搜索公司地址", text: $searchText)
                         .onSubmit { searchLocation() }
                     if !searchText.isEmpty {
                         Button {
@@ -71,7 +50,7 @@ struct LocationPickerView: View {
                 .padding()
                 .background(.bar)
                 
-                // 搜索结果列表
+                // 搜索结果
                 if !searchResults.isEmpty {
                     ScrollView {
                         VStack(spacing: 0) {
@@ -80,7 +59,7 @@ struct LocationPickerView: View {
                                     selectSearchResult(item)
                                 } label: {
                                     HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
+                                        VStack(alignment: .leading, spacing: 2) {
                                             Text(item.name ?? "未知地点")
                                                 .font(.body)
                                                 .foregroundStyle(.primary)
@@ -88,100 +67,65 @@ struct LocationPickerView: View {
                                                 Text(address)
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
                                             }
                                         }
                                         Spacer()
                                         Image(systemName: "chevron.right")
                                             .foregroundStyle(.secondary)
                                     }
-                                    .padding()
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 8)
                                 }
                                 Divider()
                             }
                         }
                     }
-                    .frame(maxHeight: 200)
+                    .frame(maxHeight: 180)
                     .background(.bar)
                 }
                 
-                // 地图（可拖动标记）
-                ZStack(alignment: .center) {
-                    Map(position: $cameraPosition) {
-                        // 显示已选位置
-                        if let selected = selectedLocation {
-                            Annotation(settings.companyName, coordinate: selected) {
-                                // 自定义可拖动标记
-                                Image(systemName: "mappin.circle.fill")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(.red)
-                                    .background(Circle().fill(.white).frame(width: 16, height: 16))
-                                    .shadow(radius: 3)
-                                    .offset(y: -16)
-                            }
-                            
-                            // 围栏范围
-                            MapCircle(center: selected, radius: settings.geofenceRadius)
-                                .foregroundStyle(.blue.opacity(0.1))
-                                .stroke(.blue.opacity(0.5), lineWidth: 2)
-                        }
-                        
-                        // 显示用户位置
-                        UserAnnotation()
-                    }
-                    .onMapCameraChange(frequency: .continuous) { context in
-                        mapCenterCoordinate = context.region.center
-                    }
-                    
-                    // 中心十字准星（当没有选择位置时显示）
-                    if selectedLocation == nil {
-                        Image(systemName: "plus")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundStyle(.blue)
-                            .padding(12)
-                            .background(Circle().fill(.white))
-                            .shadow(radius: 2)
-                    }
-                }
+                // 可拖动标记的地图
+                DraggableMapView(
+                    selectedCoordinate: $selectedCoordinate,
+                    fenceRadius: settings.geofenceRadius
+                )
                 
-                // 底部操作栏
-                VStack(spacing: 12) {
-                    // 位置信息
-                    if let selected = selectedLocation {
-                        Text("已选择: \(String(format: "%.6f", selected.latitude)), \(String(format: "%.6f", selected.longitude))")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else if let center = mapCenterCoordinate {
-                        Text("移动地图选择位置: \(String(format: "%.6f", center.latitude)), \(String(format: "%.6f", center.longitude))")
+                // 底部信息栏
+                VStack(spacing: 10) {
+                    if let coord = selectedCoordinate {
+                        Text("📍 \(String(format: "%.6f", coord.latitude)), \(String(format: "%.6f", coord.longitude))")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("移动地图选择位置")
+                        Text("拖动地图上的标记来选择位置")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         // 定位到当前位置
                         Button {
                             moveToCurrentLocation()
                         } label: {
-                            Image(systemName: "location.fill")
+                            Label("定位", systemImage: "location.fill")
                         }
                         .buttonStyle(.bordered)
                         
-                        // 手动输入经纬度
+                        // 手动输入
                         Button {
                             showManualInput.toggle()
                         } label: {
-                            Image(systemName: "keyboard")
+                            Label("输入", systemImage: "keyboard")
                         }
                         .buttonStyle(.bordered)
                         
-                        // 使用地图中心（确认当前位置）
-                        Button("确认位置") {
-                            confirmMapCenter()
+                        // 保存
+                        Button("保存") {
+                            saveAndDismiss()
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(selectedCoordinate == nil)
                     }
                 }
                 .padding()
@@ -198,12 +142,12 @@ struct LocationPickerView: View {
                 manualInputSheet
             }
             .onAppear {
-                requestLocationPermission()
+                requestLocation()
             }
         }
     }
     
-    // 手动输入经纬度面板
+    // 手动输入面板
     private var manualInputSheet: some View {
         NavigationStack {
             Form {
@@ -223,7 +167,7 @@ struct LocationPickerView: View {
                 } header: {
                     Label("输入经纬度", systemImage: "location.fill")
                 } footer: {
-                    Text("纬度范围: -90 ~ 90，经度范围: -180 ~ 180")
+                    Text("纬度: -90 ~ 90，经度: -180 ~ 180")
                 }
                 
                 Section {
@@ -237,97 +181,57 @@ struct LocationPickerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") {
-                        showManualInput = false
-                    }
+                    Button("完成") { showManualInput = false }
                 }
             }
         }
         .presentationDetents([.medium])
     }
     
-    // 检查坐标是否有效
     private func isValidCoordinates() -> Bool {
         guard let lat = Double(manualLatitude),
-              let lon = Double(manualLongitude) else {
-            return false
-        }
+              let lon = Double(manualLongitude) else { return false }
         return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
     }
     
-    // 应用手动输入的坐标
     private func applyManualCoordinates() {
         guard let lat = Double(manualLatitude),
               let lon = Double(manualLongitude),
-              isValidCoordinates() else {
-            return
-        }
+              isValidCoordinates() else { return }
         
-        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-        selectedLocation = coordinate
-        
-        withAnimation {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            ))
-        }
-        
+        selectedCoordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
         showManualInput = false
     }
     
-    // 请求定位权限
-    private func requestLocationPermission() {
-        locationManager.delegate = LocationManagerDelegate.shared
-        locationManager.requestWhenInUseAuthorization()
+    private func requestLocation() {
+        let manager = CLLocationManager()
+        manager.delegate = LocationManagerDelegate.shared
+        manager.requestWhenInUseAuthorization()
         
-        // 延迟获取位置
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            if let location = LocationManagerDelegate.shared.currentLocation {
-                currentLocation = location
-                if settings.companyLatitude == 0 && selectedLocation == nil {
-                    moveToCurrentLocation()
-                }
-            } else {
-                // 开始更新位置
-                locationManager.startUpdatingLocation()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    if let location = LocationManagerDelegate.shared.currentLocation {
-                        currentLocation = location
-                        if settings.companyLatitude == 0 && selectedLocation == nil {
-                            moveToCurrentLocation()
-                        }
-                    }
+        if selectedCoordinate == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if let location = LocationManagerDelegate.shared.currentLocation {
+                    selectedCoordinate = location.coordinate
                 }
             }
         }
     }
     
-    // 移动到当前位置
     private func moveToCurrentLocation() {
-        if let location = LocationManagerDelegate.shared.currentLocation ?? currentLocation {
-            let coordinate = location.coordinate
-            withAnimation {
-                cameraPosition = .region(MKCoordinateRegion(
-                    center: coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                ))
-            }
-            mapCenterCoordinate = coordinate
+        if let location = LocationManagerDelegate.shared.currentLocation {
+            selectedCoordinate = location.coordinate
         } else {
-            // 重新请求位置
-            locationManager.startUpdatingLocation()
+            let manager = CLLocationManager()
+            manager.delegate = LocationManagerDelegate.shared
+            manager.startUpdatingLocation()
         }
     }
     
-    // 搜索地址
     private func searchLocation() {
         guard !searchText.isEmpty else { return }
-        
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = searchText
         
-        // 如果有当前位置，优先搜索附近
         if let current = LocationManagerDelegate.shared.currentLocation {
             request.region = MKCoordinateRegion(
                 center: current.coordinate,
@@ -335,53 +239,204 @@ struct LocationPickerView: View {
             )
         }
         
-        let search = MKLocalSearch(request: request)
-        search.start { response, error in
+        MKLocalSearch(request: request).start { response, error in
             if let items = response?.mapItems {
                 searchResults = items
             }
         }
     }
     
-    // 选择搜索结果
     private func selectSearchResult(_ item: MKMapItem) {
-        let coordinate = item.placemark.coordinate
-        selectedLocation = coordinate
-        
-        withAnimation {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            ))
-        }
-        
+        selectedCoordinate = item.placemark.coordinate
         if let name = item.name, !name.isEmpty {
             settings.companyName = name
         }
-        
-        // 更新手动输入框
-        manualLatitude = String(format: "%.6f", coordinate.latitude)
-        manualLongitude = String(format: "%.6f", coordinate.longitude)
-        
+        manualLatitude = String(format: "%.6f", item.placemark.coordinate.latitude)
+        manualLongitude = String(format: "%.6f", item.placemark.coordinate.longitude)
         searchResults = []
         searchText = ""
     }
     
-    // 确认地图中心位置
-    private func confirmMapCenter() {
-        if let center = mapCenterCoordinate {
-            selectedLocation = center
-            manualLatitude = String(format: "%.6f", center.latitude)
-            manualLongitude = String(format: "%.6f", center.longitude)
+    private func saveAndDismiss() {
+        guard let coord = selectedCoordinate else { return }
+        settings.companyLatitude = coord.latitude
+        settings.companyLongitude = coord.longitude
+        dismiss()
+    }
+}
+
+// MARK: - 可拖动标记的地图视图
+struct DraggableMapView: UIViewRepresentable {
+    @Binding var selectedCoordinate: CLLocationCoordinate2D?
+    let fenceRadius: Double
+    
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.showsUserLocation = true
+        mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
+        
+        // 添加长按手势来移动标记
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPress.minimumPressDuration = 0.3
+        mapView.addGestureRecognizer(longPress)
+        
+        // 如果有已保存的坐标，显示标记
+        if let coord = selectedCoordinate {
+            context.coordinator.addAnnotation(at: coord, on: mapView)
+            
+            let region = MKCoordinateRegion(
+                center: coord,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )
+            mapView.setRegion(region, animated: false)
+        } else {
+            // 定位到当前位置
+            if let location = LocationManagerDelegate.shared.currentLocation {
+                let region = MKCoordinateRegion(
+                    center: location.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                )
+                mapView.setRegion(region, animated: false)
+            }
+        }
+        
+        return mapView
+    }
+    
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        // 更新围栏圆圈
+        context.coordinator.updateFenceRadius(mapView, radius: fenceRadius)
+        
+        // 如果外部更新了坐标，同步到地图
+        if let coord = selectedCoordinate {
+            if let annotation = mapView.annotations.first(where: { $0 is MKPointAnnotation }) as? MKPointAnnotation {
+                if annotation.coordinate.latitude != coord.latitude || annotation.coordinate.longitude != coord.longitude {
+                    annotation.coordinate = coord
+                    context.coordinator.updateFenceRadius(mapView, radius: fenceRadius)
+                }
+            } else {
+                context.coordinator.addAnnotation(at: coord, on: mapView)
+            }
         }
     }
     
-    // 确认选择并保存
-    private func confirmSelection() {
-        guard let location = selectedLocation else { return }
-        settings.companyLatitude = location.latitude
-        settings.companyLongitude = location.longitude
-        dismiss()
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, MKMapViewDelegate {
+        let parent: DraggableMapView
+        private var fenceOverlay: MKCircle?
+        
+        init(_ parent: DraggableMapView) {
+            self.parent = parent
+        }
+        
+        func addAnnotation(at coordinate: CLLocationCoordinate2D, on mapView: MKMapView) {
+            // 清除旧标记
+            mapView.removeAnnotations(mapView.annotations.filter { $0 is MKPointAnnotation })
+            
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = coordinate
+            annotation.title = "公司位置"
+            mapView.addAnnotation(annotation)
+            
+            updateFenceRadius(mapView, radius: parent.fenceRadius)
+        }
+        
+        func updateFenceRadius(_ mapView: MKMapView, radius: Double) {
+            // 移除旧圆圈
+            if let old = fenceOverlay {
+                mapView.removeOverlay(old)
+            }
+            
+            // 添加新圆圈
+            if let annotation = mapView.annotations.first(where: { $0 is MKPointAnnotation }) {
+                let circle = MKCircle(center: annotation.coordinate, radius: radius)
+                mapView.addOverlay(circle)
+                fenceOverlay = circle
+            }
+        }
+        
+        // 长按拖动标记
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard let mapView = gesture.view as? MKMapView else { return }
+            
+            let point = gesture.location(in: mapView)
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            
+            switch gesture.state {
+            case .began:
+                // 开始拖动 - 找到最近的标记
+                mapView.isUserInteractionEnabled = true
+                
+            case .changed:
+                // 拖动中 - 移动标记
+                if let annotation = mapView.annotations.first(where: { $0 is MKPointAnnotation }) as? MKPointAnnotation {
+                    annotation.coordinate = coordinate
+                    parent.selectedCoordinate = coordinate
+                    updateFenceRadius(mapView, radius: parent.fenceRadius)
+                }
+                
+            case .ended:
+                // 结束拖动
+                break
+                
+            default:
+                break
+            }
+        }
+        
+        // MARK: - MKMapViewDelegate
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard annotation is MKPointAnnotation else { return nil }
+            
+            let identifier = "draggablePin"
+            var view: MKMarkerAnnotationView
+            
+            if let dequeued = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView {
+                view = dequeued
+            } else {
+                view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            }
+            
+            view.markerTintColor = .red
+            view.isDraggable = true  // 关键：允许拖动
+            view.canShowCallout = true
+            
+            return view
+        }
+        
+        func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, didChange newState: MKAnnotationView.DragState, fromOldState oldState: MKAnnotationView.DragState) {
+            switch newState {
+            case .ending:
+                if let annotation = view.annotation {
+                    parent.selectedCoordinate = annotation.coordinate
+                    updateFenceRadius(mapView, radius: parent.fenceRadius)
+                }
+                view.setDragState(.none, animated: true)
+                
+            case .canceling:
+                view.setDragState(.none, animated: true)
+                
+            default:
+                break
+            }
+        }
+        
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let circle = overlay as? MKCircle {
+                let renderer = MKCircleRenderer(circle: circle)
+                renderer.fillColor = UIColor.blue.withAlphaComponent(0.1)
+                renderer.strokeColor = UIColor.blue.withAlphaComponent(0.5)
+                renderer.lineWidth = 2
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
     }
 }
 
@@ -390,7 +445,6 @@ class LocationManagerDelegate: NSObject, CLLocationManagerDelegate, ObservableOb
     static let shared = LocationManagerDelegate()
     
     @Published var currentLocation: CLLocation?
-    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let location = locations.last {
@@ -399,14 +453,9 @@ class LocationManagerDelegate: NSObject, CLLocationManagerDelegate, ObservableOb
     }
     
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        authorizationStatus = status
         if status == .authorizedWhenInUse || status == .authorizedAlways {
             manager.startUpdatingLocation()
         }
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("定位失败: \(error)")
     }
 }
 

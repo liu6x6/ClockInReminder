@@ -11,6 +11,11 @@ struct ContentView: View {
         Group {
             if let settings = settingsList.first {
                 TabView {
+                    TimeLineView()
+                        .tabItem {
+                            Label("时间", systemImage: "clock.fill")
+                        }
+                    
                     SettingsView(settings: settings)
                         .tabItem {
                             Label("设置", systemImage: "gearshape.fill")
