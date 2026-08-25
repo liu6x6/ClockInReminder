@@ -17,8 +17,29 @@ struct CalendarView: View {
                 // MARK: - 星期标题
                 weekdayHeaderView
                 
-                // MARK: - 日历网格
+                // MARK: - 日历网格（支持滑动切换月份）
                 calendarGridView
+                    .gesture(
+                        DragGesture()
+                            .onEnded { value in
+                                let threshold = 50.0
+                                if value.translation.width < -threshold {
+                                    // 向左滑动，切换到下个月
+                                    withAnimation {
+                                        if let nextMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) {
+                                            currentMonth = nextMonth
+                                        }
+                                    }
+                                } else if value.translation.width > threshold {
+                                    // 向右滑动，切换到上个月
+                                    withAnimation {
+                                        if let prevMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) {
+                                            currentMonth = prevMonth
+                                        }
+                                    }
+                                }
+                            }
+                    )
                 
                 // MARK: - 统计信息
                 summaryView
