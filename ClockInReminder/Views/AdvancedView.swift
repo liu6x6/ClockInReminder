@@ -1,10 +1,13 @@
 import SwiftUI
 import CoreLocation
+import UserNotifications
 
 struct AdvancedView: View {
     @Bindable var settings: ReminderSettings
     @State private var showLocationPicker = false
     @State private var showTestAlert = false
+    @State private var pendingNotificationsText = ""
+    @State private var geofenceStatus = "未监听"
     
     private let locationService = LocationService.shared
     
@@ -53,7 +56,22 @@ struct AdvancedView: View {
                             Text("围栏半径: \(Int(settings.geofenceRadius)) 米")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                            Slider(value: $settings.geofenceRadius, in: 10...200, step: 10)
+                            Slider(value: $settings.geofenceRadius, in: 50...500, step: 10)
+                            
+                            Text("💡 建议设置 200-300 米，太小可能无法及时触发")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        // 围栏状态
+                        HStack {
+                            Text("围栏状态")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(geofenceStatus)
+                                .font(.footnote)
+                                .foregroundStyle(geofenceStatus == "监听中" ? .green : .secondary)
                         }
                     }
                 } header: {
@@ -75,10 +93,27 @@ struct AdvancedView: View {
                     } label: {
                         Label("测试下班提醒", systemImage: "bell.badge.fill")
                     }
+                    
+                    Button {
+                        checkPendingNotifications()
+                    } label: {
+                        Label("查看已注册通知", systemImage: "list.bullet.rectangle")
+                    }
                 } header: {
                     Label("测试", systemImage: "wrench.fill")
                 } footer: {
                     Text("发送测试通知，3 秒后弹出，请切到后台查看效果")
+                }
+                
+                // MARK: - 通知状态
+                if !pendingNotificationsText.isEmpty {
+                    Section {
+                        Text(pendingNotificationsText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        Label("已注册通知", systemImage: "info.circle")
+                    }
                 }
                 
                 // MARK: - 权限状态
@@ -87,6 +122,12 @@ struct AdvancedView: View {
                         Text("定位权限")
                         Spacer()
                         LocationStatusBadge(status: locationService.authorizationStatus)
+                    }
+                    
+                    if locationService.authorizationStatus != .authorizedAlways {
+                        Text("⚠️ 地理围栏需要「始终允许」定位权限")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
                     
                     Button("打开系统设置") {
@@ -124,8 +165,14 @@ struct AdvancedView: View {
                 radius: settings.geofenceRadius,
                 identifier: "company"
             )
+            geofenceStatus = "监听中"
         } else {
             locationService.stopAllMonitoring()
+            if !settings.geofenceEnabled {
+                geofenceStatus = "已关闭"
+            } else if settings.companyLatitude == 0 {
+                geofenceStatus = "未设置位置"
+            }
         }
     }
     
@@ -143,6 +190,35 @@ struct AdvancedView: View {
             message: settings.eveningMessage
         )
         showTestAlert = true
+    }
+    
+    private func checkPendingNotifications() {
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            var text = "已注册 \(requests.count) 个通知：\n\n"
+            
+            if requests.isEmpty {
+                text += "⚠️ 没有注册任何通知\n\n请检查：\n1. 日历中是否选择了日期\n2. 通知权限是否开启"
+            } else {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "MM-dd HH:mm"
+                
+                for request in requests.prefix(10) {
+                    if let trigger = request.trigger as? UNCalendarNotificationTrigger {
+                        if let date = trigger.nextTriggerDate() {
+                            text += "• \(request.content.title)\n  \(formatter.string(from: date))\n\n"
+                        }
+                    }
+                }
+                
+                if requests.count > 10 {
+                    text += "... 还有 \(requests.count - 10) 个通知"
+                }
+            }
+            
+            DispatchQueue.main.async {
+                pendingNotificationsText = text
+            }
+        }
     }
 }
 

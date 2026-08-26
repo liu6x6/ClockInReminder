@@ -43,7 +43,7 @@ struct ClockInReminderApp: App {
                 checkNotificationLaunch()
             }
         }
-        .modelContainer(for: ReminderSettings.self)
+        .modelContainer(for: [ReminderSettings.self, CustomReminder.self])
     }
     
     private func checkNotificationLaunch() {

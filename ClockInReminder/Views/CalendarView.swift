@@ -1,12 +1,19 @@
 import SwiftUI
+import SwiftData
 
 struct CalendarView: View {
     @Bindable var settings: ReminderSettings
+    @Query private var allCustomReminders: [CustomReminder]
     @State private var currentMonth: Date = Date()
     @State private var showTodayIndicator = false
+    @State private var selectedDate: Date?
+    @State private var showDateDetail = false
+    @State private var pendingSingleTapDate: Date?
+    @State private var pendingSingleTapTask: Task<Void, Never>?
     
     private let calendar = Calendar.current
     private let weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+    private let doubleTapDelay: TimeInterval = 0.5
     
     var body: some View {
         NavigationStack {
@@ -72,7 +79,18 @@ struct CalendarView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showDateDetail) {
+                if let date = selectedDate {
+                    DateDetailView(currentDate: date, settings: settings)
+                }
+            }
         }
+    }
+    
+    // 获取某天的自定义提醒数量
+    private func customReminderCount(for date: Date) -> Int {
+        let dateString = ReminderSettings.dateKey(date)
+        return allCustomReminders.filter { $0.date == dateString }.count
     }
     
     // 是否是过去的月份
@@ -159,6 +177,7 @@ struct CalendarView: View {
                 if let day = day {
                     let isPast = isDatePast(day)
                     let isToday = calendar.isDateInToday(day)
+                    let customCount = customReminderCount(for: day)
                     
                     DayCell(
                         date: day,
@@ -166,19 +185,55 @@ struct CalendarView: View {
                         isConfirmed: settings.isConfirmed(day),
                         isToday: isToday,
                         isPast: isPast,
-                        isCurrentMonth: calendar.isDate(day, equalTo: currentMonth, toGranularity: .month)
+                        isCurrentMonth: calendar.isDate(day, equalTo: currentMonth, toGranularity: .month),
+                        morningEnabled: settings.morningEnabled,
+                        eveningEnabled: settings.eveningEnabled,
+                        customReminderCount: customCount
                     )
-                    .onTapGesture {
-                        // 过去的日期不能点击
+                    .onTapGesture(count: 2) {
+                        // 双击：取消待处理的单击，立即打开详情页
+                        pendingSingleTapTask?.cancel()
+                        pendingSingleTapTask = nil
+                        pendingSingleTapDate = nil
+                        
+                        selectedDate = day
+                        showDateDetail = true
+                    }
+                    .onTapGesture(count: 1) {
+                        // 单击：延迟执行，等待可能的双击
                         guard !isPast else { return }
                         
-                        withAnimation(.spring(response: 0.3)) {
-                            settings.toggleDate(day)
-                            NotificationService.shared.scheduleAll(settings: settings)
+                        // 取消之前的待处理任务
+                        pendingSingleTapTask?.cancel()
+                        
+                        // 记录当前点击的日期
+                        pendingSingleTapDate = day
+                        
+                        // 启动延迟任务
+                        pendingSingleTapTask = Task {
+                            try? await Task.sleep(nanoseconds: UInt64(doubleTapDelay * 1_000_000_000))
+                            
+                            // 检查任务是否被取消
+                            if Task.isCancelled { return }
+                            
+                            // 检查是否还是同一个日期
+                            if pendingSingleTapDate == day {
+                                await MainActor.run {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        settings.toggleDate(day)
+                                        NotificationService.shared.scheduleAll(settings: settings)
+                                    }
+                                    pendingSingleTapDate = nil
+                                }
+                            }
                         }
                     }
                     .onLongPressGesture {
-                        // 长按确认/取消确认
+                        // 长按：取消待处理的单击，确认/取消确认
+                        pendingSingleTapTask?.cancel()
+                        pendingSingleTapTask = nil
+                        pendingSingleTapDate = nil
+                        
                         withAnimation(.spring(response: 0.3)) {
                             if settings.isConfirmed(day) {
                                 settings.unconfirmDate(day)
@@ -220,6 +275,13 @@ struct CalendarView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            
+            HStack {
+                Text("💡 双击日期查看/编辑提醒")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
         }
         .padding(.top, 16)
     }
@@ -324,11 +386,16 @@ struct CalendarView: View {
         // 过去月份不允许操作
         guard !isPastMonth else { return }
         
+        let now = Date()
+        
         let datesToRemove = settings.scheduledDates.filter { dateStr in
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             if let date = formatter.date(from: dateStr) {
-                return calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
+                // 只清空本月的、且还没过去的日期
+                let isCurrentMonthDate = calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
+                let isNotPast = !isDatePast(date)
+                return isCurrentMonthDate && isNotPast
             }
             return false
         }
@@ -346,6 +413,9 @@ struct DayCell: View {
     let isToday: Bool
     let isPast: Bool
     let isCurrentMonth: Bool
+    let morningEnabled: Bool
+    let eveningEnabled: Bool
+    let customReminderCount: Int
     
     private let calendar = Calendar.current
     
@@ -366,11 +436,17 @@ struct DayCell: View {
                     .fill(.green)
                     .frame(width: 36, height: 36)
             }
-            // 已安排的蓝色圈
+            // 已安排的蓝色圈（根据上班/下班显示半圆或全圆）
             else if isScheduled {
+                reminderIndicator
+            }
+            
+            // 自定义提醒的红色小点
+            if customReminderCount > 0 && !isConfirmed {
                 Circle()
-                    .fill(.blue)
-                    .frame(width: 36, height: 36)
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                    .offset(x: 14, y: -14)
             }
             
             // 日期文字
@@ -390,6 +466,27 @@ struct DayCell: View {
         .opacity(isPast ? 0.4 : 1)
     }
     
+    // 提醒指示器（根据上班/下班显示半圆或全圆）
+    @ViewBuilder
+    private var reminderIndicator: some View {
+        if morningEnabled && eveningEnabled {
+            // 上下午都有，显示完整蓝色圆
+            Circle()
+                .fill(.blue)
+                .frame(width: 36, height: 36)
+        } else if morningEnabled {
+            // 只有上午，显示左半圆
+            HalfCircle(shape: .left)
+                .fill(.blue)
+                .frame(width: 36, height: 36)
+        } else if eveningEnabled {
+            // 只有下午，显示右半圆
+            HalfCircle(shape: .right)
+                .fill(.blue)
+                .frame(width: 36, height: 36)
+        }
+    }
+    
     private var textColor: Color {
         if isConfirmed || isScheduled {
             return .white
@@ -401,6 +498,33 @@ struct DayCell: View {
             return .primary
         }
         return .secondary
+    }
+}
+
+// 半圆形状
+enum HalfCircleShape {
+    case left
+    case right
+}
+
+struct HalfCircle: Shape {
+    let shape: HalfCircleShape
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) / 2
+        
+        switch shape {
+        case .left:
+            path.addArc(center: center, radius: radius, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+            path.closeSubpath()
+        case .right:
+            path.addArc(center: center, radius: radius, startAngle: .degrees(270), endAngle: .degrees(90), clockwise: false)
+            path.closeSubpath()
+        }
+        
+        return path
     }
 }
 

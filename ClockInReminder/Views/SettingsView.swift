@@ -41,8 +41,16 @@ struct SettingsView: View {
                         Text("Purr").tag("Purr.aiff")
                         Text("Tink").tag("Tink.aiff")
                     }
+                    
+                    Toggle("震动", isOn: $settings.morningVibrate)
                 } header: {
                     Label("上班提醒声音", systemImage: "speaker.wave.2.fill")
+                } footer: {
+                    if settings.morningVibrate {
+                        Text("✅ 通知时会发出声音并震动")
+                    } else {
+                        Text("🔇 通知时仅发出声音，不震动")
+                    }
                 }
                 
                 // MARK: - 下班提醒
@@ -79,8 +87,16 @@ struct SettingsView: View {
                         Text("Purr").tag("Purr.aiff")
                         Text("Tink").tag("Tink.aiff")
                     }
+                    
+                    Toggle("震动", isOn: $settings.eveningVibrate)
                 } header: {
                     Label("下班提醒声音", systemImage: "speaker.wave.2.fill")
+                } footer: {
+                    if settings.eveningVibrate {
+                        Text("✅ 通知时会发出声音并震动")
+                    } else {
+                        Text("🔇 通知时仅发出声音，不震动")
+                    }
                 }
                 
                 // MARK: - 权限状态
@@ -117,6 +133,8 @@ struct SettingsView: View {
             .onChange(of: settings.eveningMessage) { _, _ in refreshNotifications() }
             .onChange(of: settings.morningSound) { _, _ in refreshNotifications() }
             .onChange(of: settings.eveningSound) { _, _ in refreshNotifications() }
+            .onChange(of: settings.morningVibrate) { _, _ in refreshNotifications() }
+            .onChange(of: settings.eveningVibrate) { _, _ in refreshNotifications() }
         }
     }
     

@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct TimeLineView: View {
-    @State private var currentTime = Date()
-    @State private var timer: Timer?
     @State private var selectedTab = 0
     
     // 工作时间范围
@@ -13,72 +11,71 @@ struct TimeLineView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // 滑动切换的时钟视图
-                TabView(selection: $selectedTab) {
-                    // 数字时钟
-                    DigitalClockView(currentTime: currentTime)
-                        .tag(0)
-                    
-                    // 模拟时钟
-                    AnalogClockView(
-                        currentTime: currentTime,
-                        startHour: workStartHour,
-                        startMinute: workStartMinute,
-                        endHour: workEndHour,
-                        endMinute: workEndMinute
-                    )
-                    .padding(.horizontal, 20)
-                    .tag(1)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .indexViewStyle(.page(backgroundDisplayMode: .always))
-                .frame(height: 420)
+            // 使用 TimelineView 确保时间持续更新
+            TimelineView(.periodic(from: .now, by: 1.0)) { context in
+                let currentTime = context.date
                 
-                // 时间线段（只在数字时钟页面显示）
-                if selectedTab == 0 {
-                    VStack(spacing: 16) {
-                        Text("工作时间")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
+                VStack(spacing: 20) {
+                    // 滑动切换的时钟视图
+                    TabView(selection: $selectedTab) {
+                        // 数字时钟
+                        DigitalClockView(currentTime: currentTime)
+                            .tag(0)
                         
-                        TimeLineBar(
+                        // 模拟时钟
+                        AnalogClockView(
                             currentTime: currentTime,
                             startHour: workStartHour,
                             startMinute: workStartMinute,
                             endHour: workEndHour,
                             endMinute: workEndMinute
                         )
-                        .frame(height: 60)
-                        .padding(.horizontal)
-                        
-                        // 状态提示
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(statusColor)
-                                .frame(width: 12, height: 12)
-                            Text(statusText)
-                                .font(.subheadline)
+                        .padding(.horizontal, 20)
+                        .tag(1)
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .indexViewStyle(.page(backgroundDisplayMode: .always))
+                    .frame(height: 420)
+                    
+                    // 时间线段（只在数字时钟页面显示）
+                    if selectedTab == 0 {
+                        VStack(spacing: 16) {
+                            Text("工作时间")
+                                .font(.headline)
                                 .foregroundStyle(.secondary)
+                            
+                            TimeLineBar(
+                                currentTime: currentTime,
+                                startHour: workStartHour,
+                                startMinute: workStartMinute,
+                                endHour: workEndHour,
+                                endMinute: workEndMinute
+                            )
+                            .frame(height: 60)
+                            .padding(.horizontal)
+                            
+                            // 状态提示
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(statusColor(currentTime: currentTime))
+                                    .frame(width: 12, height: 12)
+                                Text(statusText(currentTime: currentTime))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    
+                    Spacer()
                 }
-                
-                Spacer()
             }
             .navigationTitle("时间")
-            .onAppear {
-                startTimer()
-            }
-            .onDisappear {
-                stopTimer()
-            }
         }
     }
     
     // MARK: - 状态文本
     
-    private var statusText: String {
+    private func statusText(currentTime: Date) -> String {
         let calendar = Calendar.current
         let now = calendar.dateComponents([.hour, .minute], from: currentTime)
         let currentMinutes = now.hour! * 60 + now.minute!
@@ -116,7 +113,7 @@ struct TimeLineView: View {
         }
     }
     
-    private var statusColor: Color {
+    private func statusColor(currentTime: Date) -> Color {
         let calendar = Calendar.current
         let now = calendar.dateComponents([.hour, .minute], from: currentTime)
         let currentMinutes = now.hour! * 60 + now.minute!
@@ -131,19 +128,6 @@ struct TimeLineView: View {
         } else {
             return .green
         }
-    }
-    
-    // MARK: - 定时器
-    
-    private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            currentTime = Date()
-        }
-    }
-    
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
     }
 }
 

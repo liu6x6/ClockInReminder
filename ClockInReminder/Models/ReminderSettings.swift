@@ -28,6 +28,10 @@ class ReminderSettings {
     var morningSound: String
     var eveningSound: String
     
+    // 震动设置
+    var morningVibrate: Bool
+    var eveningVibrate: Bool
+    
     // 打卡日期（格式: "yyyy-MM-dd"）
     var scheduledDates: [String]
     
@@ -47,13 +51,16 @@ class ReminderSettings {
         self.companyName = "公司"
         self.companyLatitude = 0
         self.companyLongitude = 0
-        self.geofenceRadius = 100
+        self.geofenceRadius = 200
         
         self.morningMessage = "⏰ 记得打卡！别忘了打开打卡 App"
         self.eveningMessage = "🏠 下班了！别忘了打卡"
         
         self.morningSound = "default"
         self.eveningSound = "default"
+        
+        self.morningVibrate = true
+        self.eveningVibrate = true
         
         self.scheduledDates = []
         self.confirmedDates = []

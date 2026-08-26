@@ -2,10 +2,122 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+// MARK: - 定位管理器（单例）
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    static let shared = LocationManager()
+    
+    private let locationManager = CLLocationManager()
+    
+    @Published var currentLocation: CLLocation?
+    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        authorizationStatus = locationManager.authorizationStatus
+    }
+    
+    func requestPermission() {
+        locationManager.requestWhenInUseAuthorization()
+    }
+    
+    func requestAlwaysPermission() {
+        locationManager.requestAlwaysAuthorization()
+    }
+    
+    func startUpdating() {
+        locationManager.startUpdatingLocation()
+    }
+    
+    func stopUpdating() {
+        locationManager.stopUpdatingLocation()
+    }
+    
+    // MARK: - 地理围栏
+    
+    func startMonitoringGeofence(region: CLCircularRegion) {
+        locationManager.startMonitoring(for: region)
+    }
+    
+    func stopMonitoringGeofence(identifier: String) {
+        let regions = locationManager.monitoredRegions.filter { $0.identifier == identifier }
+        for region in regions {
+            locationManager.stopMonitoring(for: region)
+        }
+    }
+    
+    func stopAllGeofenceMonitoring() {
+        for region in locationManager.monitoredRegions {
+            locationManager.stopMonitoring(for: region)
+        }
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let location = locations.last {
+            currentLocation = location
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        authorizationStatus = status
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            locationManager.startUpdatingLocation()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("定位失败: \(error)")
+    }
+    
+    // 进入区域
+    func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
+        if region.identifier == "company" {
+            sendGeofenceNotification(
+                title: "到达公司",
+                message: "⏰ 到公司了！记得打卡"
+            )
+        }
+    }
+    
+    // 离开区域
+    func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        if region.identifier == "company" {
+            sendGeofenceNotification(
+                title: "离开公司",
+                message: "🏠 离开公司了！别忘了打卡"
+            )
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        print("地理围栏监听失败: \(error)")
+    }
+    
+    // 地理围栏通知
+    private func sendGeofenceNotification(title: String, message: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = message
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: "geofence_\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
+        
+        UNUserNotificationCenter.current().add(request)
+    }
+}
+
 struct LocationPickerView: View {
     @Bindable var settings: ReminderSettings
     @Environment(\.dismiss) private var dismiss
     
+    @State private var cameraPosition: MapCameraPosition
     @State private var searchText = ""
     @State private var searchResults: [MKMapItem] = []
     @State private var selectedCoordinate: CLLocationCoordinate2D?
@@ -15,16 +127,28 @@ struct LocationPickerView: View {
     @State private var manualLatitude = ""
     @State private var manualLongitude = ""
     
+    @StateObject private var locationManager = LocationManager.shared
+    
     init(settings: ReminderSettings) {
         self.settings = settings
         
         if settings.companyLatitude != 0 {
-            _selectedCoordinate = State(initialValue: CLLocationCoordinate2D(
+            let coordinate = CLLocationCoordinate2D(
                 latitude: settings.companyLatitude,
                 longitude: settings.companyLongitude
-            ))
+            )
+            _cameraPosition = State(initialValue: .region(MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )))
+            _selectedCoordinate = State(initialValue: coordinate)
             _manualLatitude = State(initialValue: String(format: "%.6f", settings.companyLatitude))
             _manualLongitude = State(initialValue: String(format: "%.6f", settings.companyLongitude))
+        } else {
+            _cameraPosition = State(initialValue: .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737),
+                span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+            )))
         }
     }
     
@@ -88,6 +212,7 @@ struct LocationPickerView: View {
                 // 可拖动标记的地图
                 DraggableMapView(
                     selectedCoordinate: $selectedCoordinate,
+                    cameraPosition: $cameraPosition,
                     fenceRadius: settings.geofenceRadius
                 )
                 
@@ -199,31 +324,55 @@ struct LocationPickerView: View {
               let lon = Double(manualLongitude),
               isValidCoordinates() else { return }
         
-        selectedCoordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        selectedCoordinate = coordinate
+        
+        // 移动地图到新位置
+        withAnimation {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ))
+        }
+        
         showManualInput = false
     }
     
     private func requestLocation() {
-        let manager = CLLocationManager()
-        manager.delegate = LocationManagerDelegate.shared
-        manager.requestWhenInUseAuthorization()
+        locationManager.requestPermission()
+        locationManager.startUpdating()
         
+        // 如果没有已保存的位置，尝试定位到当前位置
         if selectedCoordinate == nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                if let location = LocationManagerDelegate.shared.currentLocation {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if let location = locationManager.currentLocation {
                     selectedCoordinate = location.coordinate
+                    withAnimation {
+                        cameraPosition = .region(MKCoordinateRegion(
+                            center: location.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                        ))
+                    }
                 }
             }
         }
     }
     
     private func moveToCurrentLocation() {
-        if let location = LocationManagerDelegate.shared.currentLocation {
-            selectedCoordinate = location.coordinate
-        } else {
-            let manager = CLLocationManager()
-            manager.delegate = LocationManagerDelegate.shared
-            manager.startUpdatingLocation()
+        // 确保正在获取位置
+        locationManager.startUpdating()
+        
+        // 等待获取位置后移动地图
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            if let location = locationManager.currentLocation {
+                selectedCoordinate = location.coordinate
+                withAnimation {
+                    cameraPosition = .region(MKCoordinateRegion(
+                        center: location.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                    ))
+                }
+            }
         }
     }
     
@@ -232,7 +381,7 @@ struct LocationPickerView: View {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = searchText
         
-        if let current = LocationManagerDelegate.shared.currentLocation {
+        if let current = locationManager.currentLocation {
             request.region = MKCoordinateRegion(
                 center: current.coordinate,
                 span: MKCoordinateSpan(latitudeDelta: 1, longitudeDelta: 1)
@@ -253,6 +402,15 @@ struct LocationPickerView: View {
         }
         manualLatitude = String(format: "%.6f", item.placemark.coordinate.latitude)
         manualLongitude = String(format: "%.6f", item.placemark.coordinate.longitude)
+        
+        // 移动地图到搜索结果
+        withAnimation {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: item.placemark.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ))
+        }
+        
         searchResults = []
         searchText = ""
     }
@@ -268,6 +426,7 @@ struct LocationPickerView: View {
 // MARK: - 可拖动标记的地图视图
 struct DraggableMapView: UIViewRepresentable {
     @Binding var selectedCoordinate: CLLocationCoordinate2D?
+    @Binding var cameraPosition: MapCameraPosition
     let fenceRadius: Double
     
     func makeUIView(context: Context) -> MKMapView {
@@ -277,29 +436,9 @@ struct DraggableMapView: UIViewRepresentable {
         mapView.isRotateEnabled = false
         mapView.isPitchEnabled = false
         
-        // 添加长按手势来移动标记
-        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
-        longPress.minimumPressDuration = 0.3
-        mapView.addGestureRecognizer(longPress)
-        
         // 如果有已保存的坐标，显示标记
         if let coord = selectedCoordinate {
             context.coordinator.addAnnotation(at: coord, on: mapView)
-            
-            let region = MKCoordinateRegion(
-                center: coord,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            )
-            mapView.setRegion(region, animated: false)
-        } else {
-            // 定位到当前位置
-            if let location = LocationManagerDelegate.shared.currentLocation {
-                let region = MKCoordinateRegion(
-                    center: location.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                )
-                mapView.setRegion(region, animated: false)
-            }
         }
         
         return mapView
@@ -315,6 +454,13 @@ struct DraggableMapView: UIViewRepresentable {
                 if annotation.coordinate.latitude != coord.latitude || annotation.coordinate.longitude != coord.longitude {
                     annotation.coordinate = coord
                     context.coordinator.updateFenceRadius(mapView, radius: fenceRadius)
+                    
+                    // 移动地图到新位置
+                    let region = MKCoordinateRegion(
+                        center: coord,
+                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                    )
+                    mapView.setRegion(region, animated: true)
                 }
             } else {
                 context.coordinator.addAnnotation(at: coord, on: mapView)
@@ -360,35 +506,6 @@ struct DraggableMapView: UIViewRepresentable {
             }
         }
         
-        // 长按拖动标记
-        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-            guard let mapView = gesture.view as? MKMapView else { return }
-            
-            let point = gesture.location(in: mapView)
-            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
-            
-            switch gesture.state {
-            case .began:
-                // 开始拖动 - 找到最近的标记
-                mapView.isUserInteractionEnabled = true
-                
-            case .changed:
-                // 拖动中 - 移动标记
-                if let annotation = mapView.annotations.first(where: { $0 is MKPointAnnotation }) as? MKPointAnnotation {
-                    annotation.coordinate = coordinate
-                    parent.selectedCoordinate = coordinate
-                    updateFenceRadius(mapView, radius: parent.fenceRadius)
-                }
-                
-            case .ended:
-                // 结束拖动
-                break
-                
-            default:
-                break
-            }
-        }
-        
         // MARK: - MKMapViewDelegate
         
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -404,7 +521,7 @@ struct DraggableMapView: UIViewRepresentable {
             }
             
             view.markerTintColor = .red
-            view.isDraggable = true  // 关键：允许拖动
+            view.isDraggable = true
             view.canShowCallout = true
             
             return view
@@ -436,25 +553,6 @@ struct DraggableMapView: UIViewRepresentable {
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
-        }
-    }
-}
-
-// 定位管理器代理（单例）
-class LocationManagerDelegate: NSObject, CLLocationManagerDelegate, ObservableObject {
-    static let shared = LocationManagerDelegate()
-    
-    @Published var currentLocation: CLLocation?
-    
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let location = locations.last {
-            currentLocation = location
-        }
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        if status == .authorizedWhenInUse || status == .authorizedAlways {
-            manager.startUpdatingLocation()
         }
     }
 }

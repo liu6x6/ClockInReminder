@@ -19,6 +19,8 @@
 		A10012 /* AdvancedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012 /* AdvancedView.swift */; };
 		A10013 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013 /* CalendarView.swift */; };
 		A10014 /* TimeLineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* TimeLineView.swift */; };
+		A10015 /* CustomReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* CustomReminder.swift */; };
+		A10016 /* DateDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016 /* DateDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		B10012 /* AdvancedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedView.swift; sourceTree = "<group>"; };
 		B10013 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		B10014 /* TimeLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeLineView.swift; sourceTree = "<group>"; };
+		B10015 /* CustomReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomReminder.swift; sourceTree = "<group>"; };
+		B10016 /* DateDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateDetailView.swift; sourceTree = "<group>"; };
 		C10001 /* ClockInReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClockInReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -80,6 +84,7 @@
 				B10012 /* AdvancedView.swift */,
 				B10013 /* CalendarView.swift */,
 				B10014 /* TimeLineView.swift */,
+				B10016 /* DateDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -88,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				B10003 /* ReminderSettings.swift */,
+				B10015 /* CustomReminder.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -189,6 +195,8 @@
 				A10012 /* AdvancedView.swift in Sources */,
 				A10013 /* CalendarView.swift in Sources */,
 				A10014 /* TimeLineView.swift in Sources */,
+				A10015 /* CustomReminder.swift in Sources */,
+				A10016 /* DateDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
