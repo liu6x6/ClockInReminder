@@ -29,8 +29,8 @@ class ReminderSettings {
     var eveningSound: String
     
     // 震动设置
-    var morningVibrate: Bool
-    var eveningVibrate: Bool
+    var morningVibrate: Bool = true
+    var eveningVibrate: Bool = true
     
     // 打卡日期（格式: "yyyy-MM-dd"）
     var scheduledDates: [String]

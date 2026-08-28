@@ -386,8 +386,6 @@ struct CalendarView: View {
         // 过去月份不允许操作
         guard !isPastMonth else { return }
         
-        let now = Date()
-        
         let datesToRemove = settings.scheduledDates.filter { dateStr in
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"

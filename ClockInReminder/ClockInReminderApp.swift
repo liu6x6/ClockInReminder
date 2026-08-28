@@ -7,6 +7,45 @@ struct ClockInReminderApp: App {
     @State private var showLaunchScreen = true
     @State private var pendingConfirmation = false
     
+    // 配置 SwiftData 容器，启用自动迁移
+    var sharedModelContainer: ModelContainer = {
+        let schema = Schema([
+            ReminderSettings.self,
+            CustomReminder.self,
+        ])
+        let modelConfiguration = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false
+        )
+        
+        do {
+            return try ModelContainer(
+                for: schema,
+                configurations: [modelConfiguration]
+            )
+        } catch {
+            // 如果数据库加载失败，删除旧数据库并重建
+            print("数据库加载失败，尝试重建: \(error)")
+            
+            // 删除旧数据库文件
+            let fileManager = FileManager.default
+            let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dbURL = appSupportURL.appendingPathComponent("default.store")
+            
+            try? fileManager.removeItem(at: dbURL)
+            
+            // 重新创建数据库
+            do {
+                return try ModelContainer(
+                    for: schema,
+                    configurations: [modelConfiguration]
+                )
+            } catch {
+                fatalError("无法创建 ModelContainer: \(error)")
+            }
+        }
+    }()
+    
     // 设置通知代理（前台也显示通知横幅）
     init() {
         UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
@@ -43,7 +82,7 @@ struct ClockInReminderApp: App {
                 checkNotificationLaunch()
             }
         }
-        .modelContainer(for: [ReminderSettings.self, CustomReminder.self])
+        .modelContainer(sharedModelContainer)
     }
     
     private func checkNotificationLaunch() {
