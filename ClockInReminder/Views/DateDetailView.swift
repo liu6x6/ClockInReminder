@@ -33,15 +33,15 @@ struct DateDetailView: View {
             .sorted { ($0.hour * 60 + $0.minute) < ($1.hour * 60 + $1.minute) }
     }
     
-    // 上班提醒
+    // 上班提醒（检查当天是否禁用）
     private var morningReminder: (time: String, enabled: Bool)? {
-        guard settings.morningEnabled else { return nil }
+        guard settings.isMorningEnabled(on: currentDate) else { return nil }
         return (String(format: "%02d:%02d", settings.morningHour, settings.morningMinute), true)
     }
     
-    // 下班提醒
+    // 下班提醒（检查当天是否禁用）
     private var eveningReminder: (time: String, enabled: Bool)? {
-        guard settings.eveningEnabled else { return nil }
+        guard settings.isEveningEnabled(on: currentDate) else { return nil }
         return (String(format: "%02d:%02d", settings.eveningHour, settings.eveningMinute), true)
     }
     
@@ -80,9 +80,12 @@ struct DateDetailView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Image(systemName: "lock.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    Button(role: .destructive) {
+                                        disableMorningReminder()
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .foregroundStyle(.red)
+                                    }
                                 }
                             }
                             
@@ -98,15 +101,32 @@ struct DateDetailView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    Image(systemName: "lock.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    Button(role: .destructive) {
+                                        disableEveningReminder()
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .foregroundStyle(.red)
+                                    }
+                                }
+                            }
+                            
+                            // 如果当天没有固定提醒，显示恢复按钮
+                            if morningReminder == nil || eveningReminder == nil {
+                                Button {
+                                    restoreAllReminders()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .foregroundStyle(.blue)
+                                        Text("恢复所有固定提醒")
+                                            .foregroundStyle(.blue)
+                                    }
                                 }
                             }
                         } header: {
                             Text("固定提醒")
                         } footer: {
-                            Text("固定提醒请在设置页面修改")
+                            Text("删除后仅影响当天，可在设置页面恢复全局开关")
                         }
                         
                         // 自定义提醒
@@ -207,6 +227,24 @@ struct DateDetailView: View {
         
         // 删除数据
         modelContext.delete(reminder)
+    }
+    
+    private func disableMorningReminder() {
+        settings.disableMorning(on: currentDate)
+        // 删除已注册的通知
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["morning_\(dateString)"])
+    }
+    
+    private func disableEveningReminder() {
+        settings.disableEvening(on: currentDate)
+        // 删除已注册的通知
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["evening_\(dateString)"])
+    }
+    
+    private func restoreAllReminders() {
+        settings.enableMorning(on: currentDate)
+        settings.enableEvening(on: currentDate)
+        scheduleAllReminders()
     }
     
     private func scheduleAllReminders() {

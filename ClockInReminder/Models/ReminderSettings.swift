@@ -38,6 +38,10 @@ class ReminderSettings {
     // 已确认收到通知的日期（格式: "yyyy-MM-dd"）
     var confirmedDates: [String]
     
+    // 某天禁用的固定提醒（格式: "yyyy-MM-dd"）
+    var disabledMorningDates: [String] = []
+    var disabledEveningDates: [String] = []
+    
     init() {
         self.morningEnabled = true
         self.morningHour = 9
@@ -100,6 +104,48 @@ class ReminderSettings {
     func unconfirmDate(_ date: Date) {
         let key = Self.dateKey(date)
         confirmedDates.removeAll { $0 == key }
+    }
+    
+    // 检查某天的上班提醒是否有效（全局启用且未被禁用）
+    func isMorningEnabled(on date: Date) -> Bool {
+        guard morningEnabled else { return false }
+        let key = Self.dateKey(date)
+        return !disabledMorningDates.contains(key)
+    }
+    
+    // 检查某天的下班提醒是否有效（全局启用且未被禁用）
+    func isEveningEnabled(on date: Date) -> Bool {
+        guard eveningEnabled else { return false }
+        let key = Self.dateKey(date)
+        return !disabledEveningDates.contains(key)
+    }
+    
+    // 禁用某天的上班提醒
+    func disableMorning(on date: Date) {
+        let key = Self.dateKey(date)
+        if !disabledMorningDates.contains(key) {
+            disabledMorningDates.append(key)
+        }
+    }
+    
+    // 禁用某天的下班提醒
+    func disableEvening(on date: Date) {
+        let key = Self.dateKey(date)
+        if !disabledEveningDates.contains(key) {
+            disabledEveningDates.append(key)
+        }
+    }
+    
+    // 恢复某天的上班提醒
+    func enableMorning(on date: Date) {
+        let key = Self.dateKey(date)
+        disabledMorningDates.removeAll { $0 == key }
+    }
+    
+    // 恢复某天的下班提醒
+    func enableEvening(on date: Date) {
+        let key = Self.dateKey(date)
+        disabledEveningDates.removeAll { $0 == key }
     }
     
     // 获取日期字符串 key

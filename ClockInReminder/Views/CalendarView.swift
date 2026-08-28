@@ -186,8 +186,8 @@ struct CalendarView: View {
                         isToday: isToday,
                         isPast: isPast,
                         isCurrentMonth: calendar.isDate(day, equalTo: currentMonth, toGranularity: .month),
-                        morningEnabled: settings.morningEnabled,
-                        eveningEnabled: settings.eveningEnabled,
+                        morningEnabled: settings.isMorningEnabled(on: day),
+                        eveningEnabled: settings.isEveningEnabled(on: day),
                         customReminderCount: customCount
                     )
                     .onTapGesture(count: 2) {

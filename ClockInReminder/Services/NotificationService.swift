@@ -50,8 +50,8 @@ class NotificationService {
             
             let components = calendar.dateComponents([.year, .month, .day], from: date)
             
-            // 注册上班提醒
-            if settings.morningEnabled {
+            // 注册上班提醒（检查全局开关和当天是否禁用）
+            if settings.isMorningEnabled(on: date) {
                 // 检查通知触发时间是否已过去
                 if let triggerDate = calendar.date(bySettingHour: settings.morningHour, minute: settings.morningMinute, second: 0, of: date),
                    triggerDate > now {
@@ -73,8 +73,8 @@ class NotificationService {
                 }
             }
             
-            // 注册下班提醒
-            if settings.eveningEnabled {
+            // 注册下班提醒（检查全局开关和当天是否禁用）
+            if settings.isEveningEnabled(on: date) {
                 // 检查通知触发时间是否已过去
                 if let triggerDate = calendar.date(bySettingHour: settings.eveningHour, minute: settings.eveningMinute, second: 0, of: date),
                    triggerDate > now {
