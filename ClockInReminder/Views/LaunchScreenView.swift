@@ -7,12 +7,20 @@ struct LaunchScreenView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 20) {
-                Image(systemName: "clock.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.blue)
+                Image("logo")
+                    .resizable()
+                    .frame(width: 80,height: 80)
+                    .cornerRadius(18)
                 
-                Text("打卡提醒")
-                    .font(.system(size: 30, weight: .bold))
+                
+//                Text("牛马打卡")
+//                    .font(.system(size: 30, weight: .bold))
+
+                Text("上班本就是牛马,但是还有好好打卡")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
         }
     }

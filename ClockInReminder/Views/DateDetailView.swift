@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import UserNotifications
 
 struct DateDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -221,24 +220,23 @@ struct DateDetailView: View {
     }
     
     private func deleteReminder(_ reminder: CustomReminder) {
-        // 删除通知
-        let notificationId = "custom_\(reminder.id)"
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notificationId])
-        
-        // 删除数据
         modelContext.delete(reminder)
+        do {
+            try modelContext.save()
+            scheduleAllReminders()
+        } catch {
+            print("删除个人提醒失败: \(error)")
+        }
     }
     
     private func disableMorningReminder() {
         settings.disableMorning(on: currentDate)
-        // 删除已注册的通知
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["morning_\(dateString)"])
+        scheduleAllReminders()
     }
     
     private func disableEveningReminder() {
         settings.disableEvening(on: currentDate)
-        // 删除已注册的通知
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["evening_\(dateString)"])
+        scheduleAllReminders()
     }
     
     private func restoreAllReminders() {
@@ -248,8 +246,13 @@ struct DateDetailView: View {
     }
     
     private func scheduleAllReminders() {
+        do {
+            try modelContext.save()
+        } catch {
+            print("保存提醒设置失败: \(error)")
+            return
+        }
         NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
-        NotificationService.shared.scheduleCustomReminders(dayReminders)
     }
 }
 

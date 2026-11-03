@@ -7,7 +7,7 @@ class NotificationService {
     static let shared = NotificationService()
     private let maximumPendingNotificationCount = 64
 
-    private struct FixedReminder {
+    private struct ScheduledReminder {
         let date: Date
         let id: String
         let title: String
@@ -40,23 +40,41 @@ class NotificationService {
         let center = UNUserNotificationCenter.current()
         center.getPendingNotificationRequests { requests in
             DispatchQueue.main.async {
-                let fixedReminderRequests = requests.filter {
-                    $0.identifier.hasPrefix("morning_") || $0.identifier.hasPrefix("evening_")
+                let managedReminderRequests = requests.filter {
+                    $0.identifier.hasPrefix("morning_")
+                        || $0.identifier.hasPrefix("evening_")
+                        || $0.identifier.hasPrefix("custom_")
                 }
-                let otherReminderCount = requests.count - fixedReminderRequests.count
-                let reminders = self.fixedReminders(settings: settings)
+                let otherReminderCount = requests.count - managedReminderRequests.count
+
+                let customReminders: [CustomReminder]
+                do {
+                    customReminders = try modelContext.fetch(FetchDescriptor<CustomReminder>())
+                } catch {
+                    print("读取个人提醒失败: \(error)")
+                    return
+                }
+
+                let reminders = self.reminderCandidates(
+                    settings: settings,
+                    customReminders: customReminders
+                )
                 let scheduledReminders = Array(
                     reminders.prefix(max(0, self.maximumPendingNotificationCount - otherReminderCount))
                 )
 
                 center.removePendingNotificationRequests(
-                    withIdentifiers: fixedReminderRequests.map(\.identifier)
+                    withIdentifiers: managedReminderRequests.map(\.identifier)
                 )
-                self.addFixedReminders(scheduledReminders) {
+                self.addReminders(scheduledReminders) {
                     center.getPendingNotificationRequests { updatedRequests in
                         let scheduledIdentifiers = Set(
                             updatedRequests
-                                .filter { $0.identifier.hasPrefix("morning_") || $0.identifier.hasPrefix("evening_") }
+                                .filter {
+                                    $0.identifier.hasPrefix("morning_")
+                                        || $0.identifier.hasPrefix("evening_")
+                                        || $0.identifier.hasPrefix("custom_")
+                                }
                                 .map(\.identifier)
                         )
 
@@ -71,13 +89,16 @@ class NotificationService {
                 }
 
                 if reminders.count > scheduledReminders.count {
-                    print("待处理通知最多只能保留 \(self.maximumPendingNotificationCount) 条；已优先注册最近 \(scheduledReminders.count) 条固定打卡提醒。")
+                    print("待处理通知最多只能保留 \(self.maximumPendingNotificationCount) 条；已优先注册最近 \(scheduledReminders.count) 条提醒。")
                 }
             }
         }
     }
 
-    private func fixedReminders(settings: ReminderSettings) -> [FixedReminder] {
+    private func reminderCandidates(
+        settings: ReminderSettings,
+        customReminders: [CustomReminder]
+    ) -> [ScheduledReminder] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -86,7 +107,7 @@ class NotificationService {
 
         let calendar = Calendar.current
         let now = Date()
-        var reminders: [FixedReminder] = []
+        var reminders: [ScheduledReminder] = []
 
         for dateKey in settings.scheduledDates {
             guard let date = formatter.date(from: dateKey) else { continue }
@@ -94,7 +115,7 @@ class NotificationService {
             if settings.isMorningEnabled(on: date),
                let triggerDate = calendar.date(bySettingHour: settings.morningHour, minute: settings.morningMinute, second: 0, of: date),
                triggerDate > now {
-                reminders.append(FixedReminder(
+                reminders.append(ScheduledReminder(
                     date: triggerDate,
                     id: "morning_\(dateKey)",
                     title: "上班打卡提醒",
@@ -108,7 +129,7 @@ class NotificationService {
             if settings.isEveningEnabled(on: date),
                let triggerDate = calendar.date(bySettingHour: settings.eveningHour, minute: settings.eveningMinute, second: 0, of: date),
                triggerDate > now {
-                reminders.append(FixedReminder(
+                reminders.append(ScheduledReminder(
                     date: triggerDate,
                     id: "evening_\(dateKey)",
                     title: "下班打卡提醒",
@@ -120,10 +141,33 @@ class NotificationService {
             }
         }
 
+        for reminder in customReminders where reminder.isEnabled {
+            guard let date = formatter.date(from: reminder.date),
+                  let triggerDate = calendar.date(
+                    bySettingHour: reminder.hour,
+                    minute: reminder.minute,
+                    second: 0,
+                    of: date
+                  ),
+                  triggerDate > now else {
+                continue
+            }
+
+            reminders.append(ScheduledReminder(
+                date: triggerDate,
+                id: "custom_\(reminder.id)",
+                title: reminder.title,
+                message: reminder.message,
+                soundName: reminder.sound,
+                vibrate: reminder.vibrate,
+                dateKey: reminder.date
+            ))
+        }
+
         return reminders.sorted { $0.date < $1.date }
     }
 
-    private func addFixedReminders(_ reminders: [FixedReminder], completion: @escaping () -> Void) {
+    private func addReminders(_ reminders: [ScheduledReminder], completion: @escaping () -> Void) {
         let calendar = Calendar.current
         let group = DispatchGroup()
 
@@ -150,7 +194,7 @@ class NotificationService {
     }
 
     private func syncScheduleRecords(
-        reminders: [FixedReminder],
+        reminders: [ScheduledReminder],
         scheduledIdentifiers: Set<String>,
         modelContext: ModelContext
     ) {
@@ -243,40 +287,6 @@ class NotificationService {
         }
     }
     
-    // 调度自定义提醒
-    func scheduleCustomReminders(_ reminders: [CustomReminder]) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let calendar = Calendar.current
-        let now = Date()
-        
-        for reminder in reminders {
-            guard reminder.isEnabled else { continue }
-            guard let date = formatter.date(from: reminder.date) else { continue }
-            
-            // 检查通知触发时间是否已过去
-            if let triggerDate = calendar.date(bySettingHour: reminder.hour, minute: reminder.minute, second: 0, of: date),
-               triggerDate > now {
-                let components = calendar.dateComponents([.year, .month, .day], from: date)
-                
-                scheduleNotification(
-                    id: "custom_\(reminder.id)",
-                    dateComponents: DateComponents(
-                        year: components.year,
-                        month: components.month,
-                        day: components.day,
-                        hour: reminder.hour,
-                        minute: reminder.minute
-                    ),
-                    title: reminder.title,
-                    message: reminder.message,
-                    soundName: reminder.sound,
-                    vibrate: reminder.vibrate,
-                    dateKey: reminder.date
-                )
-            }
-        }
-    }
 }
 
 // 前台也显示通知横幅
