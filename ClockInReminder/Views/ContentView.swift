@@ -31,6 +31,9 @@ struct ContentView: View {
                             Label("高级", systemImage: "location.fill")
                         }
                 }
+                .onAppear {
+                    NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
+                }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ConfirmTodayFromNotification"))) { notification in
                     // 用户点击通知，确认今天的打卡
                     confirmToday()
@@ -52,7 +55,7 @@ struct ContentView: View {
                 }
                 
                 if let settings = settingsList.first {
-                    NotificationService.shared.scheduleAll(settings: settings)
+                    NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
                 }
             }
         }

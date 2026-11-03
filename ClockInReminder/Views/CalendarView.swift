@@ -2,8 +2,10 @@ import SwiftUI
 import SwiftData
 
 struct CalendarView: View {
+    @Environment(\.modelContext) private var modelContext
     @Bindable var settings: ReminderSettings
     @Query private var allCustomReminders: [CustomReminder]
+    @Query private var notificationScheduleRecords: [NotificationScheduleRecord]
     @State private var currentMonth: Date = Date()
     @State private var showTodayIndicator = false
     @State private var selectedDate: Date?
@@ -23,6 +25,8 @@ struct CalendarView: View {
                 
                 // MARK: - 星期标题
                 weekdayHeaderView
+
+                notificationStatusSummary
                 
                 // MARK: - 日历网格（支持滑动切换月份）
                 calendarGridView
@@ -56,7 +60,7 @@ struct CalendarView: View {
             }
             .navigationTitle("打卡日历")
             .onAppear {
-                NotificationService.shared.scheduleAll(settings: settings)
+                NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -91,6 +95,35 @@ struct CalendarView: View {
     private func customReminderCount(for date: Date) -> Int {
         let dateString = ReminderSettings.dateKey(date)
         return allCustomReminders.filter { $0.date == dateString }.count
+    }
+
+    private func notificationScheduleStatus(for date: Date) -> (generated: Int, total: Int) {
+        let dateKey = ReminderSettings.dateKey(date)
+        let records = notificationScheduleRecords.filter { $0.dateKey == dateKey }
+        return (records.filter(\.isSystemScheduled).count, records.count)
+    }
+
+    private var notificationStatusSummary: some View {
+        let generatedCount = notificationScheduleRecords.filter(\.isSystemScheduled).count
+        let totalCount = notificationScheduleRecords.count
+
+        return HStack(spacing: ReminderUITheme.statusSpacing) {
+            if totalCount > 0 {
+                NotificationScheduleIndicator(
+                    generatedCount: generatedCount,
+                    totalCount: totalCount,
+                    showsLabel: true
+                )
+            } else {
+                Text("暂无待生成的固定提醒")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, ReminderUITheme.statusIconPadding)
     }
     
     // 是否是过去的月份
@@ -178,6 +211,7 @@ struct CalendarView: View {
                     let isPast = isDatePast(day)
                     let isToday = calendar.isDateInToday(day)
                     let customCount = customReminderCount(for: day)
+                    let notificationStatus = notificationScheduleStatus(for: day)
                     
                     DayCell(
                         date: day,
@@ -188,7 +222,9 @@ struct CalendarView: View {
                         isCurrentMonth: calendar.isDate(day, equalTo: currentMonth, toGranularity: .month),
                         morningEnabled: settings.isMorningEnabled(on: day),
                         eveningEnabled: settings.isEveningEnabled(on: day),
-                        customReminderCount: customCount
+                        customReminderCount: customCount,
+                        generatedNotificationCount: notificationStatus.generated,
+                        totalNotificationCount: notificationStatus.total
                     )
                     .onTapGesture(count: 2) {
                         // 双击：取消待处理的单击，立即打开详情页
@@ -221,7 +257,7 @@ struct CalendarView: View {
                                 await MainActor.run {
                                     withAnimation(.spring(response: 0.3)) {
                                         settings.toggleDate(day)
-                                        NotificationService.shared.scheduleAll(settings: settings)
+                                        NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
                                     }
                                     pendingSingleTapDate = nil
                                 }
@@ -378,7 +414,7 @@ struct CalendarView: View {
             }
         }
         
-        NotificationService.shared.scheduleAll(settings: settings)
+        NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
     }
     
     // 清空本月
@@ -399,7 +435,7 @@ struct CalendarView: View {
         }
         
         settings.scheduledDates.removeAll { datesToRemove.contains($0) }
-        NotificationService.shared.scheduleAll(settings: settings)
+        NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
     }
 }
 
@@ -414,6 +450,8 @@ struct DayCell: View {
     let morningEnabled: Bool
     let eveningEnabled: Bool
     let customReminderCount: Int
+    let generatedNotificationCount: Int
+    let totalNotificationCount: Int
     
     private let calendar = Calendar.current
     
@@ -445,6 +483,14 @@ struct DayCell: View {
                     .fill(.red)
                     .frame(width: 8, height: 8)
                     .offset(x: 14, y: -14)
+            }
+
+            if totalNotificationCount > 0 && !isConfirmed {
+                NotificationScheduleIndicator(
+                    generatedCount: generatedNotificationCount,
+                    totalCount: totalNotificationCount
+                )
+                .offset(x: 14, y: 14)
             }
             
             // 日期文字

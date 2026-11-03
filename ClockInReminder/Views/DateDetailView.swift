@@ -248,7 +248,7 @@ struct DateDetailView: View {
     }
     
     private func scheduleAllReminders() {
-        NotificationService.shared.scheduleAll(settings: settings)
+        NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
         NotificationService.shared.scheduleCustomReminders(dayReminders)
     }
 }

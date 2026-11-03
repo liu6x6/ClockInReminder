@@ -1,6 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @Bindable var settings: ReminderSettings
     @State private var notificationGranted = false
     
@@ -139,7 +141,7 @@ struct SettingsView: View {
     }
     
     private func refreshNotifications() {
-        NotificationService.shared.scheduleAll(settings: settings)
+        NotificationService.shared.scheduleAll(settings: settings, modelContext: modelContext)
     }
 }
 

@@ -21,6 +21,9 @@
 		A10014 /* TimeLineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014 /* TimeLineView.swift */; };
 		A10015 /* CustomReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015 /* CustomReminder.swift */; };
 		A10016 /* DateDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016 /* DateDetailView.swift */; };
+		A10017 /* NotificationScheduleRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017 /* NotificationScheduleRecord.swift */; };
+		A10018 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018 /* Theme.swift */; };
+		A10019 /* NotificationScheduleIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019 /* NotificationScheduleIndicator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +42,9 @@
 		B10014 /* TimeLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeLineView.swift; sourceTree = "<group>"; };
 		B10015 /* CustomReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomReminder.swift; sourceTree = "<group>"; };
 		B10016 /* DateDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateDetailView.swift; sourceTree = "<group>"; };
+		B10017 /* NotificationScheduleRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduleRecord.swift; sourceTree = "<group>"; };
+		B10018 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		B10019 /* NotificationScheduleIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduleIndicator.swift; sourceTree = "<group>"; };
 		C10001 /* ClockInReminder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClockInReminder.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -68,6 +74,8 @@
 				E10003 /* Views */,
 				E10004 /* Models */,
 				E10005 /* Services */,
+				E10007 /* Components */,
+				B10018 /* Theme.swift */,
 				B10008 /* Assets.xcassets */,
 				B10009 /* Info.plist */,
 			);
@@ -94,6 +102,7 @@
 			children = (
 				B10003 /* ReminderSettings.swift */,
 				B10015 /* CustomReminder.swift */,
+				B10017 /* NotificationScheduleRecord.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -113,6 +122,14 @@
 				C10001 /* ClockInReminder.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		E10007 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				B10019 /* NotificationScheduleIndicator.swift */,
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -197,6 +214,9 @@
 				A10014 /* TimeLineView.swift in Sources */,
 				A10015 /* CustomReminder.swift in Sources */,
 				A10016 /* DateDetailView.swift in Sources */,
+				A10017 /* NotificationScheduleRecord.swift in Sources */,
+				A10018 /* Theme.swift in Sources */,
+				A10019 /* NotificationScheduleIndicator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

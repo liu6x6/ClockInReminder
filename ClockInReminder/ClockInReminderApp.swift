@@ -12,6 +12,7 @@ struct ClockInReminderApp: App {
         let schema = Schema([
             ReminderSettings.self,
             CustomReminder.self,
+            NotificationScheduleRecord.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
